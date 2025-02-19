@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">SNAR Logger</string>
+    <string name="x_0_0_m_s">X: 0.0 m/s²</string>
+    <string name="y_0_0_m_s">Y: 0.0 m/s²</string>
+    <string name="z_0_0_m_s">Z: 0.0 m/s²</string>
+    <string name="g">Ускорение с g</string>
+    <string name="x_0_0">Акселерометр x: 0.0 м/с²</string>
+    <string name="y_0_0">Акселерометр y: 0.0 м/с²</string>
+    <string name="z_0_0">Акселерометр z: 0.0 м/с²</string>
+    <string name="csv">Записать в CSV</string>
+    <string name="clear">Очистить лог</string>
+    <string name="rawaccelerometer">Акселерометр без G</string>
+    <string name="authors">Разработчик:\n- Евгений Пунтус, КРБО-02-22\n\nВерсия приложения: 1.0</string>
+    <string name="logo">Logo</string>
+</resources>
