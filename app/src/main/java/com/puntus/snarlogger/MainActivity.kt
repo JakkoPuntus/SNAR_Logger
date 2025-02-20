@@ -14,7 +14,6 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
-import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -25,6 +24,7 @@ import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.formatter.ValueFormatter
 import com.github.mikephil.charting.utils.ColorTemplate
 import java.text.SimpleDateFormat
 import java.util.*
@@ -43,20 +43,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private val xEntries = ArrayList<Entry>()
     private val yEntries = ArrayList<Entry>()
     private val zEntries = ArrayList<Entry>()
-    private var startTime = 0L // Время начала измерений
-    private var elapsedTime = 0f // Общее прошедшее время
+    private var startTime = 0L
+    private var elapsedTime = 0f
 
     private val createFileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val uri: Uri? = result.data?.data
-            if (uri != null) {
+            result.data?.data?.let { uri ->
                 try {
-                    contentResolver.openOutputStream(uri)?.let { outputStream ->
+                    contentResolver.openOutputStream(uri)?.use { outputStream ->
                         accelerometerLogger.writeDataToCSV(outputStream)
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    Toast.makeText(this, "Ошибка при сохранении файла", Toast.LENGTH_SHORT).show()
+                    showToast("Ошибка при сохранении файла")
                 }
             }
         }
@@ -66,25 +65,80 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        initializeViews()
+        setupChart()
+        setupSensorSpinner()
+        setupButtons()
+
+        accelerometerLogger = logger(this)
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        startTime = System.currentTimeMillis()
+    }
+
+    private fun initializeViews() {
         xAccelTextView = findViewById(R.id.xAccelTextView)
         yAccelTextView = findViewById(R.id.yAccelTextView)
         zAccelTextView = findViewById(R.id.zAccelTextView)
         lineChart = findViewById(R.id.lineChart)
-        val recordButton = findViewById<Button>(R.id.recordButton)
-        val clearButton = findViewById<Button>(R.id.clearButton)
-        val aboutButton = findViewById<Button>(R.id.aboutButton)
-        sensorSpinner = findViewById(R.id.sensorSpinner)
+        sensorSpinner = findViewById<Spinner>(R.id.sensorSpinner)
         titleTextView = findViewById(R.id.titleTextView)
+    }
 
-        startTime = System.currentTimeMillis()
+    private fun setupChart() {
+        lineChart.apply {
+            description.text = "Ускорение от времени"
+            description.textSize = 12f
+            description.textColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
+            legend.textColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
 
-        setupChart()
+            // Настройка оси X
+            xAxis.apply {
+                textColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
+                valueFormatter = object : ValueFormatter() {
+                    override fun getFormattedValue(value: Float): String {
+                        return "${value.toInt()} с" // Ось X: время в секундах
+                    }
+                }
+                axisLineWidth = 1f
+                axisLineColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
+                setLabelCount(5, true) // Количество меток на оси X
+                granularity = 1f // Минимальный шаг оси X
+                isGranularityEnabled = true
+                setDrawLabels(true)
+                setDrawAxisLine(true)
+                setDrawGridLines(true)
+                xAxis.labelRotationAngle = 0f
+                xAxis.setCenterAxisLabels(false)
+                xAxis.setAvoidFirstLastClipping(true)
+            }
 
-        accelerometerLogger = logger(this)
+            axisLeft.apply {
+                textColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
+                axisLineWidth = 1f
+                axisLineColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
+                setLabelCount(6, true)
+                setDrawLabels(true)
+                setDrawAxisLine(true)
+                setDrawGridLines(true)
+                granularity = 0.1f
+                isGranularityEnabled = true
+                setCenterAxisLabels(false)
+                setDrawZeroLine(true)
+                zeroLineWidth = 1f
+            }
 
-        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+            // Отключение правой оси Y
+            axisRight.isEnabled = false
 
-        // Настройка Spinner
+            // Дополнительные настройки графика
+            isDragEnabled = true
+            setScaleEnabled(true)
+            setPinchZoom(true)
+            setBorderWidth(1f)
+        }
+    }
+
+    private fun setupSensorSpinner() {
         val sensorTypes = arrayOf("Акселерометр", "Линейное ускорение", "Гироскоп")
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sensorTypes)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -92,38 +146,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         sensorSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                // Очистка графика и данных
                 clearChart()
-                // Обновление заголовка и описания
                 updateTitle(position)
-                // Регистрация нового датчика
-                sensorManager.unregisterListener(this@MainActivity)
-                when (position) {
-                    0 -> registerSensor(Sensor.TYPE_ACCELEROMETER)
-                    1 -> registerSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-                    2 -> registerSensor(Sensor.TYPE_GYROSCOPE)
-                }
+                registerSelectedSensor(position)
             }
 
-            override fun onNothingSelected(parent: AdapterView<*>?) {
-                // Ничего не делаем
-            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+    }
 
-        recordButton.setOnClickListener {
-            openFilePicker()
-        }
-
-        clearButton.setOnClickListener {
-            accelerometerLogger.clearLog()
-            clearChart()
-            elapsedTime = 0f
-            startTime = System.currentTimeMillis()
-        }
-
-        aboutButton.setOnClickListener {
-            showAboutDialog()
-        }
+    private fun setupButtons() {
+        findViewById<Button>(R.id.recordButton).setOnClickListener { openFilePicker() }
+        findViewById<Button>(R.id.clearButton).setOnClickListener { clearData() }
+        findViewById<Button>(R.id.aboutButton).setOnClickListener { showAboutDialog() }
     }
 
     private fun clearChart() {
@@ -131,128 +166,107 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         yEntries.clear()
         zEntries.clear()
         lineChart.clear()
-        lineChart.invalidate() // Обновление графика
+        lineChart.invalidate()
     }
 
     private fun updateTitle(position: Int) {
-        val title = when (position) {
-            0 -> "Акселерометр"
-            1 -> "Линейное ускорение"
-            2 -> "Гироскоп"
-            else -> "Датчик"
+        val (title, description, yAxisLabel) = when (position) {
+            0 -> Triple("Акселерометр", "Ускорение от времени (акселерометр)", "м/с²")
+            1 -> Triple("Линейное ускорение", "Ускорение от времени (линейное ускорение)", "/с²")
+            2 -> Triple("Гироскоп", "Угловая скорость от времени (гироскоп)", "рад/с")
+            else -> Triple("Датчик", "Данные от времени", "Значение")
         }
         titleTextView.text = title
-
-        // Обновление описания графика
-        val description = when (position) {
-            0 -> "Ускорение от времени (акселерометр)"
-            1 -> "Ускорение от времени (линейное ускорение)"
-            2 -> "Угловая скорость от времени (гироскоп)"
-            else -> "Данные от времени"
-        }
         lineChart.description.text = description
+        lineChart.axisLeft.valueFormatter = object : ValueFormatter() {
+            override fun getFormattedValue(value: Float): String {
+                return "$value $yAxisLabel" // Подпись оси Y с единицами измерения
+            }
+        }
+        lineChart.invalidate() // Обновление графика
+    }
+
+    private fun registerSelectedSensor(position: Int) {
+        sensorManager.unregisterListener(this)
+        when (position) {
+            0 -> registerSensor(Sensor.TYPE_ACCELEROMETER)
+            1 -> registerSensor(Sensor.TYPE_LINEAR_ACCELERATION)
+            2 -> registerSensor(Sensor.TYPE_GYROSCOPE)
+        }
     }
 
     private fun registerSensor(sensorType: Int) {
-        val sensor = sensorManager.getDefaultSensor(sensorType)
-        if (sensor != null) {
-            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-        } else {
-            Toast.makeText(this, "Датчик не доступен", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupChart() {
-        lineChart.description.text = "Ускорение от времени"
-        lineChart.description.textSize = 12f
-        lineChart.description.textColor = ContextCompat.getColor(this, R.color.chart_description_color)
-        lineChart.legend.textColor = ContextCompat.getColor(this, R.color.chart_description_color)
-        lineChart.xAxis.textColor = ContextCompat.getColor(this, R.color.chart_description_color)
-        lineChart.axisLeft.textColor = ContextCompat.getColor(this, R.color.chart_description_color)
-        lineChart.isDragEnabled = true
-        lineChart.setScaleEnabled(true)
-        lineChart.setPinchZoom(true)
-        lineChart.setBorderWidth(1f)
+        sensorManager.getDefaultSensor(sensorType)?.let { sensor ->
+            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
+        } ?: showToast("Датчик не доступен")
     }
 
     private fun openFilePicker() {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "text/csv" // Тип файла
+            type = "text/csv"
             putExtra(Intent.EXTRA_TITLE, "accel_log_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.csv")
         }
         createFileLauncher.launch(intent)
     }
 
+    private fun clearData() {
+        accelerometerLogger.clearLog()
+        clearChart()
+        elapsedTime = 0f
+        startTime = System.currentTimeMillis()
+    }
+
     @SuppressLint("SetTextI18n")
     override fun onSensorChanged(event: SensorEvent?) {
         event?.let {
-            val xValue = event.values[0]
-            val yValue = event.values[1]
-            val zValue = event.values[2]
+            val (xValue, yValue, zValue) = event.values
+            updateSensorTextViews(event.sensor.type, xValue, yValue, zValue)
 
-            when (event.sensor.type) {
-                Sensor.TYPE_ACCELEROMETER -> {
-                    xAccelTextView.text = "Акселерометр x: $xValue м/с²"
-                    yAccelTextView.text = "Акселерометр y: $yValue м/с²"
-                    zAccelTextView.text = "Акселерометр z: $zValue м/с²"
-                }
-                Sensor.TYPE_LINEAR_ACCELERATION -> {
-                    xAccelTextView.text = "Линейное ускорение x: $xValue м/с²"
-                    yAccelTextView.text = "Линейное ускорение y: $yValue м/с²"
-                    zAccelTextView.text = "Линейное ускорение z: $zValue м/с²"
-                }
-                Sensor.TYPE_GYROSCOPE -> {
-                    xAccelTextView.text = "Гироскоп x: $xValue рад/с"
-                    yAccelTextView.text = "Гироскоп y: $yValue рад/с"
-                    zAccelTextView.text = "Гироскоп z: $zValue рад/с"
-                }
-            }
-
-            val currentTime = System.currentTimeMillis()
-            elapsedTime = (currentTime - startTime) / 1000f
+            elapsedTime = (System.currentTimeMillis() - startTime) / 1000f
 
             xEntries.add(Entry(elapsedTime, xValue))
             yEntries.add(Entry(elapsedTime, yValue))
             zEntries.add(Entry(elapsedTime, zValue))
 
-            val timeStamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-            accelerometerLogger.logData(timeStamp.format(Date()), xValue, yValue, zValue)
-
+            accelerometerLogger.logData(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()), xValue, yValue, zValue)
             updateChart()
         }
     }
 
+    private fun updateSensorTextViews(sensorType: Int, xValue: Float, yValue: Float, zValue: Float) {
+        val (xLabel, yLabel, zLabel) = when (sensorType) {
+            Sensor.TYPE_ACCELEROMETER -> Triple("Акселерометр x: $xValue м/с²", "Акселерометр y: $yValue м/с²", "Акселерометр z: $zValue м/с²")
+            Sensor.TYPE_LINEAR_ACCELERATION -> Triple("Линейное ускорение x: $xValue м/с²", "Линейное ускорение y: $yValue м/с²", "Линейное ускорение z: $zValue м/с²")
+            Sensor.TYPE_GYROSCOPE -> Triple("Гироскоп x: $xValue рад/с", "Гироскоп y: $yValue рад/с", "Гироскоп z: $zValue рад/с")
+            else -> Triple("", "", "")
+        }
+        xAccelTextView.text = xLabel
+        yAccelTextView.text = yLabel
+        zAccelTextView.text = zLabel
+    }
+
     private fun updateChart() {
-        val xDataSet = LineDataSet(xEntries, "X")
-        xDataSet.setColor(ColorTemplate.COLORFUL_COLORS[0])
-        xDataSet.setCircleColor(ColorTemplate.COLORFUL_COLORS[0])
-        xDataSet.setDrawCircleHole(false)
-        xDataSet.lineWidth = 1.3f
-        xDataSet.setDrawValues(false)
+        val xDataSet = createDataSet(xEntries, "X", ColorTemplate.COLORFUL_COLORS[0])
+        val yDataSet = createDataSet(yEntries, "Y", ColorTemplate.COLORFUL_COLORS[2])
+        val zDataSet = createDataSet(zEntries, "Z", ColorTemplate.COLORFUL_COLORS[3])
 
-        val yDataSet = LineDataSet(yEntries, "Y")
-        yDataSet.setColor(ColorTemplate.COLORFUL_COLORS[2])
-        yDataSet.setCircleColor(ColorTemplate.COLORFUL_COLORS[2])
-        yDataSet.setDrawCircleHole(false)
-        yDataSet.lineWidth = 1.3f
-        yDataSet.setDrawValues(false)
-
-        val zDataSet = LineDataSet(zEntries, "Z")
-        zDataSet.setColor(ColorTemplate.COLORFUL_COLORS[3])
-        zDataSet.setCircleColor(ColorTemplate.COLORFUL_COLORS[3])
-        zDataSet.setDrawCircleHole(false)
-        zDataSet.lineWidth = 1.3f
-        zDataSet.setDrawValues(false)
-
-        val lineData = LineData(xDataSet, yDataSet, zDataSet)
-        lineChart.data = lineData
-        lineChart.invalidate() // Refresh the chart
+        lineChart.data = LineData(xDataSet, yDataSet, zDataSet)
+        lineChart.invalidate()
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Handle accuracy changes if needed
+    private fun createDataSet(entries: ArrayList<Entry>, label: String, color: Int): LineDataSet {
+        return LineDataSet(entries, label).apply {
+            setColor(color)
+            setCircleColor(color)
+            setDrawCircleHole(false)
+            setDrawCircles(false)
+            lineWidth = 1.3f
+            setDrawValues(false)
+        }
     }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onPause() {
         super.onPause()
@@ -261,29 +275,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        val selectedSensor = when (sensorSpinner.selectedItemPosition) {
-            0 -> Sensor.TYPE_ACCELEROMETER
-            1 -> Sensor.TYPE_LINEAR_ACCELERATION
-            2 -> Sensor.TYPE_GYROSCOPE
-            else -> Sensor.TYPE_ACCELEROMETER
-        }
-        registerSensor(selectedSensor)
+        registerSelectedSensor(sensorSpinner.selectedItemPosition)
     }
 
     private fun showAboutDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_about, null)
-
-
-
         AlertDialog.Builder(this)
             .setTitle("Об авторах")
             .setView(dialogView)
-            .setPositiveButton("Закрыть") { dialog, _ ->
-                dialog.dismiss()
-            }
-            .create()
+            .setPositiveButton("Закрыть") { dialog, _ -> dialog.dismiss() }
             .show()
     }
 
-
+    private fun showToast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
 }
