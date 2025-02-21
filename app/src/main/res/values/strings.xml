@@ -10,6 +10,6 @@
     <string name="csv">Записать в CSV</string>
     <string name="clear">Очистить лог</string>
     <string name="rawaccelerometer">Акселерометр без G</string>
-    <string name="authors">Разработчик:\n- Евгений Пунтус\n\nПри моральной поддержке:\n- Никита Приходько\n- Сергей Пономарёв\n\nВерсия приложения: 1.1</string>
+    <string name="authors">Разработчик:\n- Евгений Пунтус\n\nПри моральной поддержке:\n- Никита Приходько\n- Сергей Пономарёв\n\nВерсия приложения: 1.2</string>
     <string name="logo">Logo</string>
 </resources>

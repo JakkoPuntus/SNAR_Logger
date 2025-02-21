@@ -96,7 +96,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 textColor = ContextCompat.getColor(this@MainActivity, R.color.chart_description_color)
                 valueFormatter = object : ValueFormatter() {
                     override fun getFormattedValue(value: Float): String {
-                        return "${value.toInt()} с" // Ось X: время в секундах
+                        val roundedValue = "%.2f".format(value)
+                        return "$roundedValue с" // Ось X: время в секундах
                     }
                 }
                 axisLineWidth = 1f
@@ -172,7 +173,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun updateTitle(position: Int) {
         val (title, description, yAxisLabel) = when (position) {
             0 -> Triple("Акселерометр", "Ускорение от времени (акселерометр)", "м/с²")
-            1 -> Triple("Линейное ускорение", "Ускорение от времени (линейное ускорение)", "/с²")
+            1 -> Triple("Линейное ускорение", "Ускорение от времени (линейное ускорение)", "м/с²")
             2 -> Triple("Гироскоп", "Угловая скорость от времени (гироскоп)", "рад/с")
             else -> Triple("Датчик", "Данные от времени", "Значение")
         }
@@ -180,7 +181,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         lineChart.description.text = description
         lineChart.axisLeft.valueFormatter = object : ValueFormatter() {
             override fun getFormattedValue(value: Float): String {
-                return "$value $yAxisLabel" // Подпись оси Y с единицами измерения
+                val roundedValue = "%.2f".format(value)
+                return "$roundedValue $yAxisLabel" // Подпись оси Y с единицами измерения
             }
         }
         lineChart.invalidate() // Обновление графика
@@ -229,7 +231,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             yEntries.add(Entry(elapsedTime, yValue))
             zEntries.add(Entry(elapsedTime, zValue))
 
-            accelerometerLogger.logData(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()), xValue, yValue, zValue)
+            accelerometerLogger.logData(SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()).format(Date()), xValue, yValue, zValue)
             updateChart()
         }
     }
